@@ -1,192 +1,88 @@
 #include "search.h"
 #include "utils.h"
+#include "pattern.h"
+#include "platform.h"
+#include "thread_pool.h"
+#include "criteria.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <process.h>
-#include <windows.h>
-
-#define MAX_THREADS 16
-#define THREAD_STACK_SIZE 65536
-#define SEARCH_TIMEOUT_MS 300000
-#define MAX_PATH_SAFE 4096
-
-typedef struct {
-    HANDLE semaphore;
-    HANDLE threads[MAX_THREADS];
-    volatile LONG active_count;
-    volatile LONG total_created;
-} thread_pool_t;
+#include <strsafe.h>
 
 typedef struct {
     search_context_t *ctx;
-    char directory[MAX_PATH_SAFE];
-    char extensions_copy[256];
-    int slot;
-} thread_data_t;
+    char *directory_path;
+    size_t depth;
+} directory_work_t;
 
-static thread_pool_t g_thread_pool = {0};
+static const char* system_paths[] = {
+    "\\$Recycle.Bin", "\\System Volume Information", "\\Windows\\System32",
+    "\\Windows\\SysWOW64", "\\Program Files", "\\Program Files (x86)",
+    "\\ProgramData", "\\Recovery", "\\Intel", "\\AMD", "\\NVIDIA",
+    "\\hiberfil.sys", "\\pagefile.sys", "\\swapfile.sys"
+};
 
-static bool safe_strcpy(char *dest, size_t dest_size, const char *src) {
-    if (!dest || !src || dest_size == 0) return false;
-    size_t src_len = strlen(src);
-    if (src_len >= dest_size) return false;
-    memcpy(dest, src, src_len + 1);
-    return true;
-}
+static const char* skip_directories[] = {
+    "$RECYCLE.BIN", "System Volume Information", "Windows", "Program Files",
+    "Program Files (x86)", "ProgramData", "Recovery", "Intel", "AMD", "NVIDIA",
+    "node_modules", ".git", ".svn", "__pycache__", "obj", "bin", "Debug",
+    "Release", ".vs", "packages", "bower_components", "dist", "build"
+};
 
-static bool safe_strcat(char *dest, size_t dest_size, const char *src) {
-    if (!dest || !src || dest_size == 0) return false;
-    size_t dest_len = strlen(dest);
-    size_t src_len = strlen(src);
-    if (dest_len + src_len >= dest_size) return false;
-    memcpy(dest + dest_len, src, src_len + 1);
-    return true;
-}
+bool is_system_directory(const char *path) {
+    if (!path) return false;
 
-static char* safe_strdup(const char *str) {
-    if (!str) return NULL;
-    size_t len = strlen(str);
-    char *copy = malloc(len + 1);
-    if (!copy) return NULL;
-    memcpy(copy, str, len + 1);
-    return copy;
-}
-
-static void safe_strlwr(char *str) {
-    while (str && *str) {
-        *str = tolower(*str);
-        str++;
+    for (size_t i = 0; i < sizeof(system_paths) / sizeof(system_paths[0]); i++) {
+        if (strstr(path, system_paths[i])) return true;
     }
+    return false;
 }
 
-static bool init_thread_pool(void) {
-    g_thread_pool.semaphore = CreateSemaphore(NULL, MAX_THREADS, MAX_THREADS, NULL);
-    if (!g_thread_pool.semaphore) return false;
-    g_thread_pool.active_count = 0;
-    g_thread_pool.total_created = 0;
-    memset(g_thread_pool.threads, 0, sizeof(g_thread_pool.threads));
-    return true;
-}
+bool should_skip_directory(const char *dirname, const search_criteria_t *criteria) {
+    if (!dirname || !criteria || !criteria->skip_common_dirs) return false;
 
-static void cleanup_thread_pool(void) {
-    for (int i = 0; i < MAX_THREADS; i++) {
-        if (g_thread_pool.threads[i]) {
-            WaitForSingleObject(g_thread_pool.threads[i], INFINITE);
-            CloseHandle(g_thread_pool.threads[i]);
-            g_thread_pool.threads[i] = NULL;
-        }
+    for (size_t i = 0; i < sizeof(skip_directories) / sizeof(skip_directories[0]); i++) {
+        if (_stricmp(dirname, skip_directories[i]) == 0) return true;
     }
-    if (g_thread_pool.semaphore) {
-        CloseHandle(g_thread_pool.semaphore);
-        g_thread_pool.semaphore = NULL;
-    }
+    return false;
 }
 
-bool matches_pattern(const char *text, const char *pattern, bool case_sensitive, bool use_glob) {
-    if (!text || !pattern) return false;
-
-    if (pattern[0] == '\0' || (pattern[0] == '*' && pattern[1] == '\0'))
-        return true;
-
-    if (use_glob && (strchr(pattern, '*') || strchr(pattern, '?'))) {
-        const char *t = text;
-        const char *p = pattern;
-
-        while (*t && *p) {
-            if (*p == '*') {
-                p++;
-                if (!*p) return true;
-                while (*t) {
-                    if (matches_pattern(t, p, case_sensitive, use_glob)) return true;
-                    t++;
-                }
-                return false;
-            } else if (*p == '?') {
-                t++;
-                p++;
-            } else {
-                char tc = case_sensitive ? *t : tolower(*t);
-                char pc = case_sensitive ? *p : tolower(*p);
-                if (tc != pc) return false;
-                t++; p++;
-            }
-        }
-        while (*p == '*') p++;
-        return !*t && !*p;
-    } else {
-        if (case_sensitive)
-            return strstr(text, pattern) != NULL;
-
-        char *text_lower = safe_strdup(text);
-        char *pattern_lower = safe_strdup(pattern);
-        if (!text_lower || !pattern_lower) {
-            free(text_lower); free(pattern_lower);
-            return false;
-        }
-        safe_strlwr(text_lower);
-        safe_strlwr(pattern_lower);
-        bool result = strstr(text_lower, pattern_lower) != NULL;
-        free(text_lower); free(pattern_lower);
-        return result;
-    }
-}
-
-static bool extension_matches(const char *filename, const char *extensions) {
-    const char *ext = strrchr(filename, '.');
-    if (!ext || !extensions) return false;
-
-    char *ext_copy = safe_strdup(extensions);
-    if (!ext_copy) return false;
-
-    bool match = false;
-    char *token = strtok(ext_copy, ",");
-    while (token && !match) {
-        while (isspace(*token)) token++;
-        if (*token == '.') token++;
-        if (_stricmp(ext + 1, token) == 0) match = true;
-        token = strtok(NULL, ",");
-    }
-
-    free(ext_copy);
-    return match;
-}
-
-bool matches_criteria(const WIN32_FIND_DATAA *find_data, const char *full_path, const search_criteria_t *criteria) {
-    if (!find_data || !criteria || (find_data->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-        return false;
-
-    if (!matches_pattern(find_data->cFileName, criteria->search_term, criteria->case_sensitive, criteria->use_glob))
-        return false;
-
-    uint64_t file_size = ((uint64_t)find_data->nFileSizeHigh << 32) | find_data->nFileSizeLow;
-    if ((criteria->has_min_size && file_size < criteria->min_size) ||
-        (criteria->has_max_size && file_size > criteria->max_size))
-        return false;
-
-    if ((criteria->has_after_time && CompareFileTime(&find_data->ftLastWriteTime, &criteria->after_time) < 0) ||
-        (criteria->has_before_time && CompareFileTime(&find_data->ftLastWriteTime, &criteria->before_time) > 0))
-        return false;
-
-    return !criteria->extensions || extension_matches(find_data->cFileName, criteria->extensions);
-}
-
-bool add_result_safe(search_context_t *ctx, const char *path, uint64_t size, FILETIME mtime) {
-    if (!ctx || !path) return false;
+search_result_t* create_search_result(const char *path, uint64_t size, FILETIME mtime) {
+    if (!path) return NULL;
 
     search_result_t *result = malloc(sizeof(search_result_t));
-    if (!result) return false;
+    if (!result) return NULL;
 
-    result->path = safe_strdup(path);
+    result->path = _strdup(path);
     if (!result->path) {
         free(result);
-        return false;
+        return NULL;
     }
 
     result->size = size;
     result->mtime = mtime;
     result->next = NULL;
+
+    return result;
+}
+
+static bool add_result_safe(search_context_t *ctx, const char *path, uint64_t size, FILETIME mtime) {
+    if (!ctx || !path) return false;
+
+    if (ctx->criteria->max_results > 0 &&
+        atomic_load(&ctx->total_results) >= ctx->criteria->max_results) {
+        return false;
+    }
+
+    search_result_t *result = create_search_result(path, size, mtime);
+    if (!result) return false;
+
+    if (ctx->result_callback) {
+        bool continue_search = ctx->result_callback(result, ctx->result_user_data);
+        if (!continue_search) {
+            atomic_store(&ctx->should_stop, true);
+        }
+    }
 
     EnterCriticalSection(&ctx->results_lock);
     if (!ctx->results_head) {
@@ -196,184 +92,216 @@ bool add_result_safe(search_context_t *ctx, const char *path, uint64_t size, FIL
         ctx->results_tail->next = result;
         ctx->results_tail = result;
     }
-    InterlockedIncrement(&ctx->total_results);
+    atomic_fetch_add(&ctx->total_results, 1);
     LeaveCriticalSection(&ctx->results_lock);
 
     return true;
 }
 
-static const char* system_paths[] = {
-    "\\$Recycle.Bin", "\\System Volume Information", "\\Windows\\System32",
-    "\\Windows\\SysWOW64", "\\Program Files", "\\Program Files (x86)",
-    "\\ProgramData", "\\Recovery", "\\Intel", "\\AMD", "\\NVIDIA",
-    "\\hiberfil.sys", "\\pagefile.sys", "\\swapfile.sys"
-};
+bool matches_criteria(const platform_file_info_t *file_info, const char *full_path,
+                     const search_criteria_t *criteria) {
+    (void)full_path;
 
-bool is_system_directory(const char *path) {
-    for (size_t i = 0; i < sizeof(system_paths) / sizeof(system_paths[0]); i++) {
-        if (strstr(path, system_paths[i])) return true;
-    }
-    return false;
-}
+    if (!file_info || !criteria || file_info->is_directory) return false;
 
-static const char* skip_directories[] = {
-    "$RECYCLE.BIN", "System Volume Information", "Windows", "Program Files",
-    "Program Files (x86)", "ProgramData", "Recovery", "Intel", "AMD", "NVIDIA",
-    "node_modules", ".git", ".svn", "__pycache__", "obj", "bin", "Debug",
-    "Release", ".vs", "packages", "bower_components", "dist", "build"
-};
+    if (!criteria_size_matches(file_info->size, criteria)) return false;
 
-bool should_skip_directory(const char *dirname) {
-    for (size_t i = 0; i < sizeof(skip_directories) / sizeof(skip_directories[0]); i++) {
-        if (_stricmp(dirname, skip_directories[i]) == 0)
-            return true;
-    }
-    return false;
-}
+    if (!criteria_time_matches(&file_info->mtime, criteria)) return false;
 
-static void process_directory_safe(search_context_t *ctx, const char *directory, const char *extensions_copy);
+    if (!criteria_extension_matches(file_info->name, criteria)) return false;
 
-static unsigned __stdcall process_directory_thread(void *param) {
-    thread_data_t *data = (thread_data_t *)param;
-
-    process_directory_safe(data->ctx, data->directory, data->extensions_copy);
-
-    CloseHandle(g_thread_pool.threads[data->slot]);
-    g_thread_pool.threads[data->slot] = NULL;
-
-    InterlockedDecrement(&g_thread_pool.active_count);
-    ReleaseSemaphore(g_thread_pool.semaphore, 1, NULL);
-
-    free(data);
-    return 0;
-}
-
-static bool spawn_directory_thread(search_context_t *ctx, const char *directory, const char *extensions_copy) {
-    if (WaitForSingleObject(g_thread_pool.semaphore, 1000) != WAIT_OBJECT_0)
-        return false;
-
-    int slot = -1;
-    for (int i = 0; i < MAX_THREADS; i++) {
-        if (!g_thread_pool.threads[i]) {
-            slot = i;
-            break;
+    if (criteria->search_term && *criteria->search_term) {
+        if (!pattern_matches(file_info->name, criteria->search_term,
+                           criteria->case_sensitive, criteria->use_glob)) {
+            return false;
         }
     }
-
-    if (slot == -1) return false;
-
-    thread_data_t *data = malloc(sizeof(thread_data_t));
-    if (!data) {
-        ReleaseSemaphore(g_thread_pool.semaphore, 1, NULL);
-        return false;
-    }
-
-    data->ctx = ctx;
-    data->slot = slot;
-    if (!safe_strcpy(data->directory, sizeof(data->directory), directory) ||
-        !safe_strcpy(data->extensions_copy, sizeof(data->extensions_copy), extensions_copy ? extensions_copy : "")) {
-        free(data);
-        ReleaseSemaphore(g_thread_pool.semaphore, 1, NULL);
-        return false;
-    }
-
-    unsigned thread_id;
-    HANDLE thread = (HANDLE)_beginthreadex(NULL, THREAD_STACK_SIZE, process_directory_thread, data, 0, &thread_id);
-    if (!thread) {
-        free(data);
-        ReleaseSemaphore(g_thread_pool.semaphore, 1, NULL);
-        return false;
-    }
-
-    g_thread_pool.threads[slot] = thread;
-    InterlockedIncrement(&g_thread_pool.active_count);
-    InterlockedIncrement(&g_thread_pool.total_created);
 
     return true;
 }
 
-static void process_directory_safe(search_context_t *ctx, const char *directory, const char *extensions_copy) {
-    if (!ctx || !directory || ctx->should_stop || is_system_directory(directory))
-        return;
+static void process_directory_work(void *context, void *user_data) {
+    (void)context;
 
-    char search_pattern[MAX_PATH_SAFE];
-    if (!safe_strcpy(search_pattern, sizeof(search_pattern), directory) ||
-        !safe_strcat(search_pattern, sizeof(search_pattern), "\\*"))
-        return;
+    directory_work_t *work = (directory_work_t*)user_data;
+    search_context_t *ctx = work->ctx;
 
-    WIN32_FIND_DATAA find_data;
-    HANDLE find_handle = FindFirstFileA(search_pattern, &find_data);
-    if (find_handle == INVALID_HANDLE_VALUE) return;
+    if (atomic_load(&ctx->should_stop)) {
+        goto cleanup;
+    }
 
-    do {
-        if (ctx->should_stop) break;
-        if (!strcmp(find_data.cFileName, ".") || !strcmp(find_data.cFileName, ".."))
-            continue;
+    if (ctx->criteria->max_depth > 0 && work->depth > ctx->criteria->max_depth) {
+        goto cleanup;
+    }
 
-        char full_path[MAX_PATH_SAFE];
-        if (!safe_strcpy(full_path, sizeof(full_path), directory) ||
-            !safe_strcat(full_path, sizeof(full_path), "\\") ||
-            !safe_strcat(full_path, sizeof(full_path), find_data.cFileName))
-            continue;
+    if (is_system_directory(work->directory_path)) {
+        goto cleanup;
+    }
 
-        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (!ctx->criteria->skip_common_dirs || !should_skip_directory(find_data.cFileName)) {
-                spawn_directory_thread(ctx, full_path, extensions_copy);
-            }
-        } else if (matches_criteria(&find_data, full_path, ctx->criteria)) {
-            uint64_t file_size = ((uint64_t)find_data.nFileSizeHigh << 32) | find_data.nFileSizeLow;
-            add_result_safe(ctx, full_path, file_size, find_data.ftLastWriteTime);
+    platform_dir_iter_t *dir_iter = platform_opendir(work->directory_path);
+    if (!dir_iter) {
+        goto cleanup;
+    }
+
+    platform_file_info_t file_info;
+    while (platform_readdir(dir_iter, &file_info)) {
+        if (atomic_load(&ctx->should_stop)) {
+            platform_free_file_info(&file_info);
+            break;
         }
 
-    } while (FindNextFileA(find_handle, &find_data) && !ctx->should_stop);
+        char full_path[MAX_PATH * 2];
+        HRESULT hr = StringCchCopyA(full_path, sizeof(full_path), work->directory_path);
+        if (SUCCEEDED(hr)) {
+            hr = StringCchCatA(full_path, sizeof(full_path), "\\");
+        }
+        if (SUCCEEDED(hr)) {
+            hr = StringCchCatA(full_path, sizeof(full_path), file_info.name);
+        }
 
-    FindClose(find_handle);
+        if (FAILED(hr)) {
+            platform_free_file_info(&file_info);
+            continue;
+        }
+
+        if (file_info.is_directory) {
+            if (!should_skip_directory(file_info.name, ctx->criteria)) {
+                directory_work_t *subdir_work = malloc(sizeof(directory_work_t));
+                if (subdir_work) {
+                    subdir_work->ctx = ctx;
+                    subdir_work->directory_path = _strdup(full_path);
+                    subdir_work->depth = work->depth + 1;
+
+                    if (subdir_work->directory_path) {
+                        atomic_fetch_add(&ctx->queued_dirs, 1);
+                        if (!thread_pool_submit(ctx->thread_pool, process_directory_work, subdir_work)) {
+                            process_directory_work(NULL, subdir_work);
+                        }
+                    } else {
+                        free(subdir_work);
+                    }
+                }
+            }
+        } else {
+            if (matches_criteria(&file_info, full_path, ctx->criteria)) {
+                add_result_safe(ctx, full_path, file_info.size, file_info.mtime);
+            }
+            atomic_fetch_add(&ctx->processed_files, 1);
+        }
+
+        platform_free_file_info(&file_info);
+    }
+
+    platform_closedir(dir_iter);
+
+cleanup:
+    free(work->directory_path);
+    free(work);
+    atomic_fetch_sub(&ctx->queued_dirs, 1);
 }
 
-int search_files_fast(search_criteria_t *criteria, search_result_t **results, size_t *count) {
-    if (!criteria || !results || !count) return -1;
+static bool search_progress_callback(size_t processed_files, size_t queued_dirs, void *user_data) {
+    search_context_t *ctx = (search_context_t*)user_data;
 
-    *results = NULL;
-    *count = 0;
+    if (ctx->progress_callback) {
+        size_t total_results = atomic_load(&ctx->total_results);
+        return ctx->progress_callback(processed_files, queued_dirs, total_results, ctx->progress_user_data);
+    }
 
-    if (!init_thread_pool()) return -1;
+    return !atomic_load(&ctx->should_stop);
+}
+
+int search_files_advanced(search_criteria_t *criteria,
+                         search_result_t **results, size_t *count,
+                         result_callback_t result_callback, void *result_user_data,
+                         search_progress_callback_t progress_callback, void *progress_user_data) {
+    if (!criteria || !criteria_validate(criteria)) return -1;
+
+    if (results) *results = NULL;
+    if (count) *count = 0;
 
     search_context_t ctx = {0};
     ctx.criteria = criteria;
-    ctx.should_stop = false;
-    ctx.total_results = 0;
+    atomic_init(&ctx.total_results, 0);
+    atomic_init(&ctx.processed_files, 0);
+    atomic_init(&ctx.queued_dirs, 0);
+    atomic_init(&ctx.should_stop, false);
     ctx.results_head = NULL;
     ctx.results_tail = NULL;
+    ctx.result_callback = result_callback;
+    ctx.result_user_data = result_user_data;
+    ctx.progress_callback = progress_callback;
+    ctx.progress_user_data = progress_user_data;
 
     if (!InitializeCriticalSectionAndSpinCount(&ctx.results_lock, 4000)) {
-        cleanup_thread_pool();
         return -1;
     }
 
-    char *extensions_copy = criteria->extensions ? safe_strdup(criteria->extensions) : NULL;
-    process_directory_safe(&ctx, criteria->root_path, extensions_copy);
-    free(extensions_copy);
+    thread_pool_config_t pool_config = {0};
+    pool_config.max_threads = criteria->max_threads;
+    pool_config.progress_cb = search_progress_callback;
+    pool_config.progress_user_data = &ctx;
+    pool_config.stop_flag = &ctx.should_stop;
 
-    DWORD start_time = GetTickCount();
-
-    while (g_thread_pool.active_count > 0 && !ctx.should_stop) {
-        Sleep(100);
-        DWORD elapsed = GetTickCount() - start_time;
-        if (elapsed > SEARCH_TIMEOUT_MS) {
-            fprintf(stderr, "Search timed out at %d ms.\n", SEARCH_TIMEOUT_MS);
-            ctx.should_stop = true;
-            break;
-        }
+    ctx.thread_pool = thread_pool_create(&pool_config);
+    if (!ctx.thread_pool) {
+        DeleteCriticalSection(&ctx.results_lock);
+        return -1;
     }
 
-    cleanup_thread_pool();
+    directory_work_t *initial_work = malloc(sizeof(directory_work_t));
+    if (!initial_work) {
+        thread_pool_destroy(ctx.thread_pool);
+        DeleteCriticalSection(&ctx.results_lock);
+        return -1;
+    }
+
+    initial_work->ctx = &ctx;
+    initial_work->directory_path = _strdup(criteria->root_path);
+    initial_work->depth = 0;
+
+    if (!initial_work->directory_path) {
+        free(initial_work);
+        thread_pool_destroy(ctx.thread_pool);
+        DeleteCriticalSection(&ctx.results_lock);
+        return -1;
+    }
+
+    atomic_fetch_add(&ctx.queued_dirs, 1);
+    if (!thread_pool_submit(ctx.thread_pool, process_directory_work, initial_work)) {
+        process_directory_work(NULL, initial_work);
+    }
+
+    bool completed = thread_pool_wait_completion(ctx.thread_pool, criteria->timeout_ms);
+    if (!completed) {
+        atomic_store(&ctx.should_stop, true);
+        thread_pool_wait_completion(ctx.thread_pool, 5000);
+    }
+
+    thread_pool_destroy(ctx.thread_pool);
     DeleteCriticalSection(&ctx.results_lock);
 
-    *results = ctx.results_head;
-    *count = ctx.total_results;
+    if (results) *results = ctx.results_head;
+    if (count) *count = atomic_load(&ctx.total_results);
 
-    printf("Search completed. Found %zu files using %ld threads.\n", *count, g_thread_pool.total_created);
-    return 0;
+    return completed ? 0 : -2;
+}
+
+int search_files_fast(search_criteria_t *criteria, search_result_t **results, size_t *count) {
+    return search_files_advanced(criteria, results, count, NULL, NULL, NULL, NULL);
+}
+
+int search_files_streaming(search_criteria_t *criteria,
+                          result_callback_t result_callback, void *user_data,
+                          search_progress_callback_t progress_callback, void *progress_user_data) {
+    return search_files_advanced(criteria, NULL, NULL, result_callback, user_data,
+                                progress_callback, progress_user_data);
+}
+
+void search_request_cancellation(search_context_t *ctx) {
+    if (ctx) {
+        atomic_store(&ctx->should_stop, true);
+    }
 }
 
 void free_search_results(search_result_t *results) {

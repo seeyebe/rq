@@ -4,6 +4,28 @@
 #include <string.h>
 #include <ctype.h>
 
+int parse_size_arg(const char *arg, uint64_t *size) {
+    if (!arg || !size) return -1;
+
+    char *endptr;
+    *size = strtoull(arg, &endptr, 10);
+
+    if (*endptr != '\0') {
+        uint64_t multiplier = 1;
+        switch (*endptr) {
+            case 'K': case 'k': multiplier = 1024; break;
+            case 'M': case 'm': multiplier = 1024 * 1024; break;
+            case 'G': case 'g': multiplier = 1024 * 1024 * 1024; break;
+            case 'T': case 't': multiplier = 1024ULL * 1024 * 1024 * 1024; break;
+            default: return -1;
+        }
+        *size *= multiplier;
+    }
+
+    return 0;
+}
+
+
 int parse_date_string(const char *date_str, FILETIME *file_time) {
     if (!date_str || !file_time) {
         return -1;
@@ -47,11 +69,4 @@ void format_filetime_iso(const FILETIME *file_time, char *buffer, size_t buffer_
 
     snprintf(buffer, buffer_size, "%04d-%02d-%02dT%02d:%02d:%02d",
              st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-}
-
-bool path_exists(const char *path) {
-    if (!path) return false;
-
-    DWORD attributes = GetFileAttributesA(path);
-    return attributes != INVALID_FILE_ATTRIBUTES;
 }
