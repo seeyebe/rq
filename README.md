@@ -22,7 +22,7 @@ This already feels dangerous.
 ### Option 1: GCC (Recommended)
 
 ```cmd
-gcc -std=c17 -Wall -Wextra -Wpedantic -I src src/*.c main.c -lshlwapi -o build/snub.exe
+gcc -std=c17 -Wall -Wextra -Wpedantic -I src src/*.c main.c -lshlwapi -o snub.exe
 .\snub.exe
 ```
 
@@ -32,5 +32,3 @@ gcc -std=c17 -Wall -Wextra -Wpedantic -I src src/*.c main.c -lshlwapi -o build/s
 make
 ./build/snub.exe
 ```
-
-*Note: The CMake/MSVC build currently has compatibility issues. Use GCC for best results.*
