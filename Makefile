@@ -17,7 +17,7 @@ all: $(OUTFILE)
 
 $(OUTFILE): $(SOURCES)
 	@if not exist "$(BUILDDIR)" mkdir "$(BUILDDIR)"
-	$(CC) $(CFLAGS) $(SOURCES) $(LIBS) -o $(OUTFILE)
+	$(CC) $(CFLAGS) main.c $(LIBS) -o $(OUTFILE)
 
 clean:
 	@if exist "$(BUILDDIR)" rmdir /s /q "$(BUILDDIR)"
