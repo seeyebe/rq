@@ -52,7 +52,7 @@ void print_usage(const char *program_name) {
 }
 
 void print_version(void) {
-    printf("snub v1.0.0\n");
+    printf("snub v0.3.0\n");
     printf("Copyright (c) 2025. Open source under MIT license.\n");
 }
 
