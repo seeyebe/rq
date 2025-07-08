@@ -1,3 +1,4 @@
+SHELL = cmd.exe
 CC = gcc
 CFLAGS = -std=c17 -Wall -Wextra -Wpedantic -O2 -g
 SRCDIR = src
