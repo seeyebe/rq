@@ -8,8 +8,8 @@ OUTFILE = $(BUILDDIR)/$(TARGET)
 LIBS = -lshlwapi
 
 # Debug build flags
-DEBUG_CFLAGS = -std=c17 -Wall -Wextra -Wpedantic -O0 -g -DDEBUG -fsanitize=address -fno-omit-frame-pointer
-DEBUG_LDFLAGS = -fsanitize=address
+DEBUG_CFLAGS = -std=c17 -Wall -Wextra -Wpedantic -O0 -g -DDEBUG -fsanitize=address,undefined -fno-omit-frame-pointer
+DEBUG_LDFLAGS = -fsanitize=address,undefined
 
 .PHONY: all clean install test debug analyze
 
