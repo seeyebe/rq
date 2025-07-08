@@ -57,12 +57,12 @@ void print_version(void) {
 }
 
 int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_options_t *options) {
+    criteria_init(criteria);
+    init_options(options);
+
     if (argc < 2) {
         return -1;
     }
-
-    criteria_init(criteria);
-    init_options(options);
 
     if (strcmp(argv[1], "--help") == 0) {
         options->show_help = true;
