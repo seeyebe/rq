@@ -206,6 +206,11 @@ cleanup:
 static bool search_progress_callback(size_t processed_files, size_t queued_dirs, void *user_data) {
     search_context_t *ctx = (search_context_t*)user_data;
 
+    if (ctx->thread_pool) {
+        thread_pool_get_stats(ctx->thread_pool, &last_thread_stats);
+        last_thread_stats_valid = true;
+    }
+
     if (ctx->progress_callback) {
         size_t total_results = atomic_load(&ctx->total_results);
         return ctx->progress_callback(processed_files, queued_dirs, total_results, ctx->progress_user_data);

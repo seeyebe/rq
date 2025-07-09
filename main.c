@@ -16,11 +16,24 @@
 #include "src/utils.c"
 
 static bool search_progress(size_t processed_files, size_t queued_dirs, size_t total_results, void *user_data) {
-    (void)user_data;
+    cli_options_t *options = (cli_options_t*)user_data;
     static _Atomic size_t last_update = 0;
     size_t prev = atomic_load(&last_update);
     if (processed_files >= prev + 1000 || queued_dirs == 0) {
-        fprintf(stderr, "\rProcessed: %zu files, Queued: %zu dirs, Found: %zu results", processed_files, queued_dirs, total_results);
+        if (options && options->show_stats) {
+            thread_pool_stats_t thread_stats;
+            if (get_last_search_thread_stats(&thread_stats)) {
+                fprintf(stderr, "\rProcessed: %zu files, Queued: %zu dirs, Found: %zu results | Pool: %zu active, %zu queued",
+                        processed_files, queued_dirs, total_results,
+                        thread_stats.active_threads, thread_stats.queued_work_items);
+            } else {
+                fprintf(stderr, "\rProcessed: %zu files, Queued: %zu dirs, Found: %zu results",
+                        processed_files, queued_dirs, total_results);
+            }
+        } else {
+            fprintf(stderr, "\rProcessed: %zu files, Queued: %zu dirs, Found: %zu results",
+                    processed_files, queued_dirs, total_results);
+        }
         atomic_store(&last_update, processed_files);
     }
     return true;
@@ -68,21 +81,9 @@ int main(int argc, char *argv[]) {
 
     fprintf(stderr, "Searching in '%s' for '%s'...\n", criteria.root_path, criteria.search_term ? criteria.search_term : "*");
 
-    int search_result = search_files_advanced(&criteria, &results, &result_count, NULL, NULL, search_progress, NULL);
+    int search_result = search_files_advanced(&criteria, &results, &result_count, NULL, NULL, search_progress, &options);
 
     fprintf(stderr, "\n");
-
-    thread_pool_stats_t thread_stats;
-    if (get_last_search_thread_stats(&thread_stats)) {
-        if (options.show_stats) {
-            fprintf(stderr, "Thread pool stats: %zu active, %zu queued, %zu completed, %zu total\n",
-                    thread_stats.active_threads, thread_stats.queued_work_items,
-                    thread_stats.completed_work_items, thread_stats.total_submitted);
-        } else {
-            fprintf(stderr, "Performance: %zu directories processed by thread pool\n",
-                    thread_stats.completed_work_items);
-        }
-    }
 
     if (search_result == -2) {
         fprintf(stderr,
