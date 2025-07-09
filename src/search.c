@@ -9,6 +9,9 @@
 #include <string.h>
 #include <strsafe.h>
 
+static thread_pool_stats_t last_thread_stats = {0};
+static bool last_thread_stats_valid = false;
+
 typedef struct {
     search_context_t *ctx;
     char *directory_path;
@@ -278,6 +281,8 @@ int search_files_advanced(search_criteria_t *criteria,
         thread_pool_wait_completion(ctx.thread_pool, 5000);
     }
 
+    last_thread_stats_valid = thread_pool_get_stats(ctx.thread_pool, &last_thread_stats);
+
     thread_pool_destroy(ctx.thread_pool);
     DeleteCriticalSection(&ctx.results_lock);
 
@@ -311,4 +316,12 @@ void free_search_results(search_result_t *results) {
         free(results);
         results = next;
     }
+}
+
+bool get_last_search_thread_stats(thread_pool_stats_t *stats) {
+    if (!stats || !last_thread_stats_valid) {
+        return false;
+    }
+    *stats = last_thread_stats;
+    return true;
 }

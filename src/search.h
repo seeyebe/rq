@@ -65,4 +65,6 @@ bool should_skip_directory(const char *dirname, const search_criteria_t *criteri
 
 void search_request_cancellation(search_context_t *ctx);
 
+bool get_last_search_thread_stats(thread_pool_stats_t *stats);
+
 #endif

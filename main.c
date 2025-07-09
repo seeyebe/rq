@@ -28,7 +28,7 @@ static bool search_progress(size_t processed_files, size_t queued_dirs, size_t t
 
 int main(int argc, char *argv[]) {
     search_criteria_t criteria;
-    cli_options_t options;
+    cli_options_t options = {0};
     search_result_t *results = NULL;
     size_t result_count = 0;
     int exit_code = 0;
@@ -71,6 +71,18 @@ int main(int argc, char *argv[]) {
     int search_result = search_files_advanced(&criteria, &results, &result_count, NULL, NULL, search_progress, NULL);
 
     fprintf(stderr, "\n");
+
+    thread_pool_stats_t thread_stats;
+    if (get_last_search_thread_stats(&thread_stats)) {
+        if (options.show_stats) {
+            fprintf(stderr, "Thread pool stats: %zu active, %zu queued, %zu completed, %zu total\n",
+                    thread_stats.active_threads, thread_stats.queued_work_items,
+                    thread_stats.completed_work_items, thread_stats.total_submitted);
+        } else {
+            fprintf(stderr, "Performance: %zu directories processed by thread pool\n",
+                    thread_stats.completed_work_items);
+        }
+    }
 
     if (search_result == -2) {
         fprintf(stderr,

@@ -34,6 +34,7 @@ void print_usage(const char *program_name) {
     printf("Output Options:\n");
     printf("  --out <file>        Write output to file\n");
     printf("  --json              Output results as JSON\n");
+    printf("  --stats             Show detailed thread pool statistics\n");
     printf("  --help              Show this help message\n");
     printf("  --version           Show version information\n\n");
     printf("Glob Patterns:\n");
@@ -52,7 +53,7 @@ void print_usage(const char *program_name) {
 }
 
 void print_version(void) {
-    printf("snub v0.3.0\n");
+    printf("snub v0.4.0\n");
     printf("Copyright (c) 2025. Open source under MIT license.\n");
 }
 
@@ -178,6 +179,8 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
             options->output_file = argv[i];
         } else if (strcmp(argv[i], "--json") == 0) {
             options->json_output = true;
+        } else if (strcmp(argv[i], "--stats") == 0) {
+            options->show_stats = true;
         } else {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
             criteria_cleanup(criteria);

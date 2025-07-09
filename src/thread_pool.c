@@ -10,6 +10,7 @@ struct thread_pool {
     atomic_size_t active_work_items;
     atomic_size_t completed_work_items;
     atomic_size_t total_submitted;
+    atomic_size_t queued_work_items;  // Track queued items ourselves
     thread_pool_config_t config;
     CRITICAL_SECTION stats_lock;
 };
@@ -24,6 +25,8 @@ static VOID CALLBACK thread_pool_work_callback(PTP_CALLBACK_INSTANCE instance, P
     (void)instance;
 
     work_item_t *item = (work_item_t*)context;
+
+    atomic_fetch_sub(&item->pool->queued_work_items, 1);
 
     if (item->pool->config.stop_flag && atomic_load(item->pool->config.stop_flag)) {
         goto cleanup;
@@ -50,6 +53,7 @@ thread_pool_t* thread_pool_create(const thread_pool_config_t *config) {
     atomic_init(&pool->active_work_items, 0);
     atomic_init(&pool->completed_work_items, 0);
     atomic_init(&pool->total_submitted, 0);
+    atomic_init(&pool->queued_work_items, 0);
 
     if (!InitializeCriticalSectionAndSpinCount(&pool->stats_lock, 4000)) {
         free(pool);
@@ -99,10 +103,12 @@ bool thread_pool_submit(thread_pool_t *pool, work_function_t work_func, void *us
         return false;
     }
 
+    atomic_fetch_add(&pool->queued_work_items, 1);
+    atomic_fetch_add(&pool->total_submitted, 1);
+
     SubmitThreadpoolWork(work);
 
     atomic_fetch_add(&pool->active_work_items, 1);
-    atomic_fetch_add(&pool->total_submitted, 1);
 
     return true;
 }
@@ -170,7 +176,7 @@ bool thread_pool_get_stats(thread_pool_t *pool, thread_pool_stats_t *stats) {
     EnterCriticalSection(&pool->stats_lock);
 
     stats->active_threads = atomic_load(&pool->active_work_items);
-    stats->queued_work_items = 0; // Not easily available with Win32 thread pool API
+    stats->queued_work_items = atomic_load(&pool->queued_work_items);
     stats->completed_work_items = atomic_load(&pool->completed_work_items);
     stats->total_submitted = atomic_load(&pool->total_submitted);
 
