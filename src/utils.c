@@ -25,6 +25,23 @@ int parse_size_arg(const char *arg, uint64_t *size) {
     return 0;
 }
 
+int parse_size_with_operator(const char *arg, uint64_t *size, char *operator) {
+    if (!arg || !size || !operator) return -1;
+
+    *operator = '=';
+    const char *size_str = arg;
+
+    if (arg[0] == '+') {
+        *operator = '+';
+        size_str = arg + 1;
+    } else if (arg[0] == '-') {
+        *operator = '-';
+        size_str = arg + 1;
+    }
+
+    return parse_size_arg(size_str, size);
+}
+
 
 int parse_date_string(const char *date_str, FILETIME *file_time) {
     if (!date_str || !file_time) {

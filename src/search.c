@@ -133,10 +133,6 @@ static void process_directory_work(void *context, void *user_data) {
         goto cleanup;
     }
 
-    if (ctx->criteria->max_depth > 0 && work->depth > ctx->criteria->max_depth) {
-        goto cleanup;
-    }
-
     if (is_system_directory(work->directory_path)) {
         goto cleanup;
     }
@@ -151,6 +147,11 @@ static void process_directory_work(void *context, void *user_data) {
         if (atomic_load(&ctx->should_stop)) {
             platform_free_file_info(&file_info);
             break;
+        }
+
+        if (!ctx->criteria->include_hidden && file_info.name[0] == '.') {
+            platform_free_file_info(&file_info);
+            continue;
         }
 
         char full_path[MAX_PATH * 2];
@@ -168,20 +169,30 @@ static void process_directory_work(void *context, void *user_data) {
         }
 
         if (file_info.is_directory) {
-            if (!should_skip_directory(file_info.name, ctx->criteria)) {
-                directory_work_t *subdir_work = malloc(sizeof(directory_work_t));
-                if (subdir_work) {
-                    subdir_work->ctx = ctx;
-                    subdir_work->directory_path = _strdup(full_path);
-                    subdir_work->depth = work->depth + 1;
+            if (file_info.is_symlink && !ctx->criteria->follow_symlinks) {
+                platform_free_file_info(&file_info);
+                continue;
+            }
 
-                    if (subdir_work->directory_path) {
-                        atomic_fetch_add(&ctx->queued_dirs, 1);
-                        if (!thread_pool_submit(ctx->thread_pool, process_directory_work, subdir_work)) {
-                            process_directory_work(NULL, subdir_work);
+            if (!should_skip_directory(file_info.name, ctx->criteria)) {
+                // Check depth limit before recursing into subdirectory
+                // max_depth == 0 means current directory only (no recursion)
+                // work->depth starts at 0, so depth 1+ directories require max_depth >= 1
+                if (work->depth < ctx->criteria->max_depth) {
+                    directory_work_t *subdir_work = malloc(sizeof(directory_work_t));
+                    if (subdir_work) {
+                        subdir_work->ctx = ctx;
+                        subdir_work->directory_path = _strdup(full_path);
+                        subdir_work->depth = work->depth + 1;
+
+                        if (subdir_work->directory_path) {
+                            atomic_fetch_add(&ctx->queued_dirs, 1);
+                            if (!thread_pool_submit(ctx->thread_pool, process_directory_work, subdir_work)) {
+                                process_directory_work(NULL, subdir_work);
+                            }
+                        } else {
+                            free(subdir_work);
                         }
-                    } else {
-                        free(subdir_work);
                     }
                 }
             }

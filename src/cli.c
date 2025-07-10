@@ -1,6 +1,8 @@
 #include "cli.h"
 #include "criteria.h"
 #include "utils.h"
+#include "output.h"
+#include "version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,46 +16,58 @@ static int parse_date_arg(const char *arg, FILETIME *file_time) {
 }
 
 void print_usage(const char *program_name) {
-    printf("Usage: %s <root_directory> <search_term> [options]\n\n", program_name);
+    printf("snub - fast file search tool for Windows\n\n");
+    printf("Usage: %s <directory> <pattern> [OPTIONS]\n\n", program_name);
+
+    printf("Arguments:\n");
+    printf("  <directory>         The directory to search in\n");
+    printf("  <pattern>           Search pattern (use --glob for wildcards)\n\n");
+
     printf("Search Options:\n");
-    printf("  --case              Case-sensitive search\n");
-    printf("  --glob              Enable glob patterns (* ? [] {})\n");
-    printf("  --no-skip           Don't skip common directories (node_modules, .git, etc.)\n");
-    printf("  --ext <extensions>  Filter by file extensions (comma-separated)\n");
-    printf("  --min <size>        Minimum file size (supports K, M, G, T suffixes)\n");
-    printf("  --max <size>        Maximum file size (supports K, M, G, T suffixes)\n");
-    printf("  --after <date>      Files modified after date (YYYY-MM-DD)\n");
-    printf("  --before <date>     Files modified before date (YYYY-MM-DD)\n");
-    printf("  --max-results <n>   Maximum number of results (0 = unlimited)\n");
-    printf("  --max-depth <n>     Maximum recursion depth (0 = unlimited)\n");
-    printf("  --follow-symlinks   Follow symbolic links\n");
-    printf("  --include-hidden    Include hidden files and directories\n\n");
-    printf("Performance Options:\n");
-    printf("  --threads <n>       Number of worker threads (0 = auto)\n");
-    printf("  --timeout <ms>      Search timeout in milliseconds\n\n");
-    printf("Output Options:\n");
-    printf("  --out <file>        Write output to file\n");
-    printf("  --json              Output results as JSON\n");
-    printf("  --stats             Show detailed thread pool statistics\n");
-    printf("  --help              Show this help message\n");
-    printf("  --version           Show version information\n\n");
-    printf("Glob Patterns:\n");
-    printf("  *                   Matches any sequence of characters\n");
-    printf("  ?                   Matches any single character\n");
-    printf("  [abc]               Matches any character in the set\n");
-    printf("  [a-z]               Matches any character in the range\n");
-    printf("  [!abc]              Matches any character NOT in the set\n");
-    printf("  {jpg,png,gif}       Matches any of the specified alternatives\n");
-    printf("  \\*                  Escapes special characters\n\n");
+    printf("  -c, --case          Case-sensitive search\n");
+    printf("  -g, --glob          Enable glob patterns (* ? [] {})\n");
+    printf("  -H, --include-hidden    Include hidden files and directories\n");
+    printf("  -L, --follow-symlinks   Follow symbolic links\n");
+    printf("      --no-skip       Don't skip common directories (node_modules, .git, etc.)\n\n");
+
+    printf("Filters:\n");
+    printf("  -e, --ext <list>    Filter by file extensions (comma-separated)\n");
+    printf("      --min <size>    Minimum file size (supports K, M, G, T suffixes)\n");
+    printf("      --max <size>    Maximum file size (supports K, M, G, T suffixes)\n");
+    printf("      --size <size>   Exact file size, or +size (larger), -size (smaller)\n");
+    printf("      --after <date>  Files modified after date (YYYY-MM-DD)\n");
+    printf("      --before <date> Files modified before date (YYYY-MM-DD)\n");
+    printf("  -d, --max-depth <n> Maximum recursion depth (0 = no recursion, default = unlimited)\n");
+    printf("      --max-results <n>   Maximum number of results (0 = unlimited)\n\n");
+
+    printf("Performance:\n");
+    printf("  -j, --threads <n>   Number of worker threads (0 = auto)\n");
+    printf("      --timeout <ms>  Search timeout in milliseconds\n");
+    printf("      --stats         Show real-time thread pool statistics\n\n");
+
+    printf("Output:\n");
+    printf("      --out <file>    Write output to file\n");
+    printf("      --json          Output results as JSON\n\n");
+
+    printf("General:\n");
+    printf("  -h, --help          Show this help message\n");
+    printf("  -V, --version       Show version information\n\n");
+
     printf("Examples:\n");
-    printf("  %s D:\\ \"*.png\" --ext png,jpg\n", program_name);
-    printf("  %s . document --ext pdf,docx --min 1K --max 10M\n", program_name);
-    printf("  %s C:\\ \"project_[0-9]*\" --after 2024-01-01 --json\n", program_name);
-    printf("  %s /home \"*.{cpp,h}\" --threads 8 --max-results 1000\n", program_name);
+    printf("  Search for all PNG files:\n");
+    printf("    %s D:\\ \"*.png\" --glob\n\n", program_name);
+    printf("  Find documents larger than 1MB:\n");
+    printf("    %s . document --min 1M --ext pdf,docx\n\n", program_name);
+    printf("  Find files smaller than 100KB:\n");
+    printf("    %s . \"\" --size -100K --ext txt\n\n", program_name);
+    printf("  Case-sensitive search with thread monitoring:\n");
+    printf("    %s C:\\ \"Config\" --case --stats --threads 8\n\n", program_name);
+
+    printf("For glob patterns: * (any chars), ? (single char), [abc] (char set), {jpg,png} (alternatives)\n");
 }
 
 void print_version(void) {
-    printf("snub v0.4.0\n");
+    printf("%s\n", get_version_string());
     printf("Copyright (c) 2025. Open source under MIT license.\n");
 }
 
@@ -65,12 +79,12 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
         return -1;
     }
 
-    if (strcmp(argv[1], "--help") == 0) {
+    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
         options->show_help = true;
         return 0;
     }
 
-    if (strcmp(argv[1], "--version") == 0) {
+    if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0) {
         options->show_version = true;
         return 0;
     }
@@ -88,17 +102,17 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
     }
 
     for (int i = 3; i < argc; i++) {
-        if (strcmp(argv[i], "--case") == 0) {
+        if (strcmp(argv[i], "--case") == 0 || strcmp(argv[i], "-c") == 0) {
             criteria->case_sensitive = true;
-        } else if (strcmp(argv[i], "--glob") == 0) {
+        } else if (strcmp(argv[i], "--glob") == 0 || strcmp(argv[i], "-g") == 0) {
             criteria->use_glob = true;
         } else if (strcmp(argv[i], "--no-skip") == 0) {
             criteria->skip_common_dirs = false;
-        } else if (strcmp(argv[i], "--follow-symlinks") == 0) {
+        } else if (strcmp(argv[i], "--follow-symlinks") == 0 || strcmp(argv[i], "-L") == 0) {
             criteria->follow_symlinks = true;
-        } else if (strcmp(argv[i], "--include-hidden") == 0) {
+        } else if (strcmp(argv[i], "--include-hidden") == 0 || strcmp(argv[i], "-H") == 0) {
             criteria->include_hidden = true;
-        } else if (strcmp(argv[i], "--ext") == 0) {
+        } else if (strcmp(argv[i], "--ext") == 0 || strcmp(argv[i], "-e") == 0) {
             if (++i >= argc) {
                 criteria_cleanup(criteria);
                 return -1;
@@ -127,6 +141,27 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
                 return -1;
             }
             criteria->has_max_size = true;
+        } else if (strcmp(argv[i], "--size") == 0) {
+            if (++i >= argc) {
+                criteria_cleanup(criteria);
+                return -1;
+            }
+            uint64_t size;
+            char operator;
+            if (parse_size_with_operator(argv[i], &size, &operator) != 0) {
+                criteria_cleanup(criteria);
+                return -1;
+            }
+            if (operator == '+') {
+                criteria->min_size = size + 1;
+                criteria->has_min_size = true;
+            } else if (operator == '-') {
+                criteria->max_size = size - 1;
+                criteria->has_max_size = true;
+            } else {
+                criteria->exact_size = size;
+                criteria->has_exact_size = true;
+            }
         } else if (strcmp(argv[i], "--after") == 0) {
             if (++i >= argc) {
                 criteria_cleanup(criteria);
@@ -153,13 +188,13 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
                 return -1;
             }
             criteria->max_results = (size_t)strtoull(argv[i], NULL, 10);
-        } else if (strcmp(argv[i], "--max-depth") == 0) {
+        } else if (strcmp(argv[i], "--max-depth") == 0 || strcmp(argv[i], "-d") == 0) {
             if (++i >= argc) {
                 criteria_cleanup(criteria);
                 return -1;
             }
             criteria->max_depth = (size_t)strtoull(argv[i], NULL, 10);
-        } else if (strcmp(argv[i], "--threads") == 0) {
+        } else if (strcmp(argv[i], "--threads") == 0 || strcmp(argv[i], "-j") == 0) {
             if (++i >= argc) {
                 criteria_cleanup(criteria);
                 return -1;
@@ -191,41 +226,6 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
     return 0;
 }
 
-static void output_json_results(FILE *fp, const search_result_t *results, size_t count) {
-    fprintf(fp, "{\n");
-    fprintf(fp, "  \"count\": %zu,\n", count);
-    fprintf(fp, "  \"results\": [\n");
-
-    bool first = true;
-    for (const search_result_t *result = results; result; result = result->next) {
-        if (!first) {
-            fprintf(fp, ",\n");
-        }
-        first = false;
-
-        char time_str[32];
-        format_filetime_iso(&result->mtime, time_str, sizeof(time_str));
-
-        fprintf(fp, "    {\n");
-        fprintf(fp, "      \"path\": \"%s\",\n", result->path);
-        fprintf(fp, "      \"size\": %llu,\n", result->size);
-        fprintf(fp, "      \"mtime\": \"%s\"\n", time_str);
-        fprintf(fp, "    }");
-    }
-
-    fprintf(fp, "\n  ]\n}\n");
-}
-
-static void output_text_results(FILE *fp, const search_result_t *results, size_t count) {
-    for (const search_result_t *result = results; result; result = result->next) {
-        fprintf(fp, "%s\n", result->path);
-    }
-
-    if (count > 0) {
-        fprintf(stderr, "\nFound %zu files.\n", count);
-    }
-}
-
 int output_results(const search_result_t *results, size_t count, const cli_options_t *options) {
     FILE *fp = stdout;
 
@@ -237,15 +237,12 @@ int output_results(const search_result_t *results, size_t count, const cli_optio
         }
     }
 
-    if (options->json_output) {
-        output_json_results(fp, results, count);
-    } else {
-        output_text_results(fp, results, count);
-    }
+    output_format_t format = options->json_output ? OUTPUT_FORMAT_JSON : OUTPUT_FORMAT_TEXT;
+    int result = output_search_results(fp, results, count, format);
 
     if (options->output_file) {
         fclose(fp);
     }
 
-    return 0;
+    return result;
 }

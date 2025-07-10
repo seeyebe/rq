@@ -12,6 +12,7 @@ typedef struct search_criteria {
     size_t extensions_count;
     uint64_t min_size;
     uint64_t max_size;
+    uint64_t exact_size;
     FILETIME after_time;
     FILETIME before_time;
     bool case_sensitive;
@@ -19,6 +20,7 @@ typedef struct search_criteria {
     bool skip_common_dirs;
     bool has_min_size;
     bool has_max_size;
+    bool has_exact_size;
     bool has_after_time;
     bool has_before_time;
 

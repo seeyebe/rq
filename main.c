@@ -9,11 +9,13 @@
 
 #include "src/cli.c"
 #include "src/criteria.c"
+#include "src/output.c"
 #include "src/pattern.c"
 #include "src/platform.c"
 #include "src/search.c"
 #include "src/thread_pool.c"
 #include "src/utils.c"
+#include "src/version.c"
 
 static bool search_progress(size_t processed_files, size_t queued_dirs, size_t total_results, void *user_data) {
     cli_options_t *options = (cli_options_t*)user_data;

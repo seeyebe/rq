@@ -45,6 +45,7 @@ typedef struct {
     uint64_t size;
     FILETIME mtime;
     bool is_directory;
+    bool is_symlink;
 } platform_file_info_t;
 
 platform_dir_iter_t* platform_opendir(const char *utf8_path);

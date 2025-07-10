@@ -17,7 +17,7 @@ void criteria_init(search_criteria_t *criteria) {
     criteria->follow_symlinks = false;
     criteria->include_hidden = false;
     criteria->max_results = 0;        // Unlimited
-    criteria->max_depth = 0;          // Unlimited
+    criteria->max_depth = SIZE_MAX;
 }
 
 bool criteria_parse_extensions(search_criteria_t *criteria, const char *extensions_str) {
@@ -114,6 +114,7 @@ bool criteria_validate(const search_criteria_t *criteria) {
         if (!criteria->extensions_count &&
             !criteria->has_min_size &&
             !criteria->has_max_size &&
+            !criteria->has_exact_size &&
             !criteria->has_after_time &&
             !criteria->has_before_time) {
             return false;
@@ -122,6 +123,10 @@ bool criteria_validate(const search_criteria_t *criteria) {
 
     if (criteria->has_min_size && criteria->has_max_size &&
         criteria->min_size > criteria->max_size) {
+        return false;
+    }
+
+    if (criteria->has_exact_size && (criteria->has_min_size || criteria->has_max_size)) {
         return false;
     }
 
@@ -163,6 +168,10 @@ bool criteria_extension_matches(const char *filename, const search_criteria_t *c
 
 bool criteria_size_matches(uint64_t file_size, const search_criteria_t *criteria) {
     if (!criteria) return true;
+
+    if (criteria->has_exact_size && file_size != criteria->exact_size) {
+        return false;
+    }
 
     if (criteria->has_min_size && file_size < criteria->min_size) {
         return false;
