@@ -72,16 +72,22 @@ search_result_t* create_search_result(const char *path, uint64_t size, FILETIME 
 static bool add_result_safe(search_context_t *ctx, const char *path, uint64_t size, FILETIME mtime) {
     if (!ctx || !path) return false;
 
+    if (atomic_load(&ctx->should_stop)) {
+        return false;
+    }
+
     if (ctx->criteria->max_results > 0 &&
         atomic_load(&ctx->total_results) >= ctx->criteria->max_results) {
+        atomic_store(&ctx->should_stop, true);
         return false;
     }
 
     search_result_t *result = create_search_result(path, size, mtime);
     if (!result) return false;
 
+    bool continue_search = true;
     if (ctx->result_callback) {
-        bool continue_search = ctx->result_callback(result, ctx->result_user_data);
+        continue_search = ctx->result_callback(result, ctx->result_user_data);
         if (!continue_search) {
             atomic_store(&ctx->should_stop, true);
         }
@@ -98,7 +104,12 @@ static bool add_result_safe(search_context_t *ctx, const char *path, uint64_t si
     atomic_fetch_add(&ctx->total_results, 1);
     LeaveCriticalSection(&ctx->results_lock);
 
-    return true;
+    if (ctx->criteria->max_results > 0 &&
+        atomic_load(&ctx->total_results) >= ctx->criteria->max_results) {
+        atomic_store(&ctx->should_stop, true);
+    }
+
+    return continue_search;
 }
 
 bool matches_criteria(const platform_file_info_t *file_info, const char *full_path,
