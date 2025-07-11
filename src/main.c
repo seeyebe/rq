@@ -1,21 +1,21 @@
-#include "src/search.h"
-#include "src/cli.h"
-#include "src/utils.h"
-#include "src/criteria.h"
+#include "search.h"
+#include "cli.h"
+#include "utils.h"
+#include "criteria.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdatomic.h>
 
-#include "src/cli.c"
-#include "src/criteria.c"
-#include "src/output.c"
-#include "src/pattern.c"
-#include "src/platform.c"
-#include "src/search.c"
-#include "src/thread_pool.c"
-#include "src/utils.c"
-#include "src/version.c"
+#include "cli.c"
+#include "criteria.c"
+#include "output.c"
+#include "pattern.c"
+#include "platform.c"
+#include "search.c"
+#include "thread_pool.c"
+#include "utils.c"
+#include "version.c"
 
 static bool search_progress(size_t processed_files, size_t queued_dirs, size_t total_results, void *user_data) {
     cli_options_t *options = (cli_options_t*)user_data;

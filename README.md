@@ -81,7 +81,7 @@ For glob patterns: * (any chars), ? (single char), [abc] (char set), {jpg,png} (
 ### Option 1: GCC (Recommended)
 
 ```bash
-gcc -std=c17 -Wall -Wextra -O3 -I src src/*.c main.c -lshlwapi -o snub.exe
+gcc -std=c17 -Wall -Wextra -O3 -I src src/*.c -lshlwapi -o snub.exe
 ```
 
 ### Option 2: Make (MinGW or Bash)

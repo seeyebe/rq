@@ -2,7 +2,7 @@ SHELL = cmd.exe
 CC = gcc
 CFLAGS = -std=c17 -Wall -Wextra -Wpedantic -O2 -g
 SRCDIR = src
-SOURCES = $(SRCDIR)/platform.c $(SRCDIR)/pattern.c $(SRCDIR)/thread_pool.c $(SRCDIR)/criteria.c $(SRCDIR)/search.c $(SRCDIR)/cli.c $(SRCDIR)/utils.c main.c
+SOURCES = $(SRCDIR)/platform.c $(SRCDIR)/pattern.c $(SRCDIR)/thread_pool.c $(SRCDIR)/criteria.c $(SRCDIR)/search.c $(SRCDIR)/cli.c $(SRCDIR)/utils.c $(SRCDIR)/main.c
 TARGET = snub.exe
 BUILDDIR = build
 OUTFILE = $(BUILDDIR)/$(TARGET)
@@ -18,7 +18,7 @@ all: $(OUTFILE)
 
 $(OUTFILE): $(SOURCES)
 	@if not exist "$(BUILDDIR)" mkdir "$(BUILDDIR)"
-	$(CC) $(CFLAGS) main.c $(LIBS) -o $(OUTFILE)
+	$(CC) $(CFLAGS) $(SRCDIR)/main.c $(LIBS) -o $(OUTFILE)
 
 clean:
 	@if exist "$(BUILDDIR)" rmdir /s /q "$(BUILDDIR)"
