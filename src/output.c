@@ -35,7 +35,7 @@ static void json_escape_string(FILE *fp, const char *str) {
 static void output_json_format(FILE *fp, const search_result_t *results, size_t count) {
     fputs("{\n", fp);
     fputs("  \"type\": \"search\",\n", fp);
-    fprintf(fp, "  \"version\": \"%s\",\n", SNUB_VERSION_STRING);
+    fprintf(fp, "  \"version\": \"%s\",\n", rq_VERSION_STRING);
     fprintf(fp, "  \"count\": %zu,\n", count);
     fputs("  \"results\": [\n", fp);
 

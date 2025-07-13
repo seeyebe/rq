@@ -16,7 +16,7 @@ static int parse_date_arg(const char *arg, FILETIME *file_time) {
 }
 
 void print_usage(const char *program_name) {
-    printf("snub - fast file search tool for Windows\n\n");
+    printf("rq - fast file search tool for Windows\n\n");
     printf("Usage: %s <directory> <pattern> [OPTIONS]\n\n", program_name);
 
     printf("Arguments:\n");

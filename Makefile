@@ -3,7 +3,7 @@ CC = gcc
 CFLAGS = -std=c17 -Wall -Wextra -Wpedantic -O2 -g
 SRCDIR = src
 SOURCES = $(SRCDIR)/platform.c $(SRCDIR)/pattern.c $(SRCDIR)/thread_pool.c $(SRCDIR)/criteria.c $(SRCDIR)/search.c $(SRCDIR)/cli.c $(SRCDIR)/utils.c $(SRCDIR)/main.c
-TARGET = snub.exe
+TARGET = rq.exe
 BUILDDIR = build
 OUTFILE = $(BUILDDIR)/$(TARGET)
 LIBS = -lshlwapi

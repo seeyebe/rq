@@ -1,18 +1,18 @@
-# snub
+# rq
 
-**snub** is a high-performance recursive file search utility for Windows, written in modern C17.
+**rq** is a high-performance recursive file search utility for Windows, written in modern C17.
 
 ## Quick Start
 
 ```bash
 # Find all C/C++ source files modified this year
-snub C:\Dev "*.c" --glob --ext c,h --after 2025-01-01
+rq C:\Dev "*.c" --glob --ext c,h --after 2025-01-01
 
 # Search for large images
-snub D:\Photos beach --ext jpg,png --size +500K
+rq D:\Photos beach --ext jpg,png --size +500K
 
 # Export recent documents as JSON
-snub C:\Users\me\Documents report --ext pdf,docx --after 2025-01-01 --json
+rq C:\Users\me\Documents report --ext pdf,docx --after 2025-01-01 --json
 ```
 
 ---
@@ -20,9 +20,9 @@ snub C:\Users\me\Documents report --ext pdf,docx --after 2025-01-01 --json
 ## Usage
 
 ```text
-snub - fast file search tool for Windows
+rq - fast file search tool for Windows
 
-Usage: snub <directory> <pattern> [OPTIONS]
+Usage: rq <directory> <pattern> [OPTIONS]
 
 Arguments:
   <directory>         The directory to search in
@@ -60,16 +60,16 @@ General:
 
 Examples:
   Search for all PNG files:
-    snub D:\ "*.png" --glob
+    rq D:\ "*.png" --glob
 
   Find documents larger than 1MB:
-    snub . document --min 1M --ext pdf,docx
+    rq . document --min 1M --ext pdf,docx
 
   Find files smaller than 100KB:
-    snub . "" --size -100K --ext txt
+    rq . "" --size -100K --ext txt
 
   Case-sensitive search with thread monitoring:
-    snub C:\ "Config" --case --stats --threads 8
+    rq C:\ "Config" --case --stats --threads 8
 
 For glob patterns: * (any chars), ? (single char), [abc] (char set), {jpg,png} (alternatives)
 ```
@@ -81,20 +81,20 @@ For glob patterns: * (any chars), ? (single char), [abc] (char set), {jpg,png} (
 ### Option 1: GCC (Recommended)
 
 ```bash
-gcc -std=c17 -Wall -Wextra -O3 -I src src/*.c -lshlwapi -o snub.exe
+gcc -std=c17 -Wall -Wextra -O3 -I src src/*.c -lshlwapi -o rq.exe
 ```
 
 ### Option 2: Make (MinGW or Bash)
 
 ```bash
 make
-./build/snub.exe
+./build/rq.exe
 ```
 
 ---
 
 ## License
 
-snub is released under the MIT License. See the [LICENSE](LICENSE) file for full license details.
+rq is released under the MIT License. See the [LICENSE](LICENSE) file for full license details.
 
-Copyright (c) 2025 snub Contributors. All rights reserved.
+Copyright (c) 2025 rq Contributors. All rights reserved.
