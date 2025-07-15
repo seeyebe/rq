@@ -124,9 +124,11 @@ bool matches_criteria(const platform_file_info_t *file_info, const char *full_pa
 
     if (!criteria_extension_matches(file_info->name, criteria)) return false;
 
+    if (!criteria_file_type_matches(file_info->name, criteria)) return false;
+
     if (criteria->search_term && *criteria->search_term) {
         if (!pattern_matches(file_info->name, criteria->search_term,
-                           criteria->case_sensitive, criteria->use_glob)) {
+                           criteria->case_sensitive, criteria->use_glob, criteria->use_regex)) {
             return false;
         }
     }
@@ -321,13 +323,6 @@ int search_files_advanced(search_criteria_t *criteria,
 
 int search_files_fast(search_criteria_t *criteria, search_result_t **results, size_t *count) {
     return search_files_advanced(criteria, results, count, NULL, NULL, NULL, NULL);
-}
-
-int search_files_streaming(search_criteria_t *criteria,
-                          result_callback_t result_callback, void *user_data,
-                          search_progress_callback_t progress_callback, void *progress_user_data) {
-    return search_files_advanced(criteria, NULL, NULL, result_callback, user_data,
-                                progress_callback, progress_user_data);
 }
 
 void search_request_cancellation(search_context_t *ctx) {

@@ -1,4 +1,5 @@
 #include "pattern.h"
+#include "regex/regex.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -156,11 +157,37 @@ bool pattern_match_glob(const char *text, const char *pattern, bool case_sensiti
     return *p == '\0';
 }
 
-bool pattern_matches(const char *text, const char *pattern, bool case_sensitive, bool use_glob) {
+bool pattern_matches(const char *text, const char *pattern, bool case_sensitive, bool use_glob, bool use_regex) {
     if (!text || !pattern) return false;
 
     if (pattern[0] == '\0' || (pattern[0] == '*' && pattern[1] == '\0')) {
         return true;
+    }
+
+    if (use_regex) {
+        if (case_sensitive) {
+            return regex_test(pattern, text);
+        } else {
+            char *lower_text = _strdup(text);
+            char *lower_pattern = _strdup(pattern);
+            if (!lower_text || !lower_pattern) {
+                free(lower_text);
+                free(lower_pattern);
+                return false;
+            }
+
+            for (int i = 0; lower_text[i]; i++) {
+                lower_text[i] = (char)g_ascii_tolower[(unsigned char)lower_text[i]];
+            }
+            for (int i = 0; lower_pattern[i]; i++) {
+                lower_pattern[i] = (char)g_ascii_tolower[(unsigned char)lower_pattern[i]];
+            }
+
+            bool result = regex_test(lower_pattern, lower_text);
+            free(lower_text);
+            free(lower_pattern);
+            return result;
+        }
     }
 
     if (use_glob) {
@@ -258,9 +285,11 @@ struct pattern_compiled {
     char *pattern;
     bool case_sensitive;
     bool use_glob;
+    bool use_regex;
+    re_t compiled_regex;
 };
 
-pattern_compiled_t* pattern_compile(const char *pattern, bool case_sensitive, bool use_glob) {
+pattern_compiled_t* pattern_compile(const char *pattern, bool case_sensitive, bool use_glob, bool use_regex) {
     if (!pattern) return NULL;
 
     pattern_compiled_t *compiled = malloc(sizeof(pattern_compiled_t));
@@ -274,17 +303,55 @@ pattern_compiled_t* pattern_compile(const char *pattern, bool case_sensitive, bo
 
     compiled->case_sensitive = case_sensitive;
     compiled->use_glob = use_glob;
+    compiled->use_regex = use_regex;
+    compiled->compiled_regex = NULL;
+
+    if (use_regex) {
+        if (case_sensitive) {
+            compiled->compiled_regex = regex_compile(pattern);
+        } else {
+            char *lower_pattern = _strdup(pattern);
+            if (lower_pattern) {
+                for (int i = 0; lower_pattern[i]; i++) {
+                    lower_pattern[i] = (char)g_ascii_tolower[(unsigned char)lower_pattern[i]];
+                }
+                compiled->compiled_regex = regex_compile(lower_pattern);
+                free(lower_pattern);
+            }
+        }
+    }
 
     return compiled;
 }
 
 bool pattern_match_compiled(const char *text, const pattern_compiled_t *compiled) {
     if (!compiled) return false;
-    return pattern_matches(text, compiled->pattern, compiled->case_sensitive, compiled->use_glob);
+
+    if (compiled->use_regex && compiled->compiled_regex) {
+        if (compiled->case_sensitive) {
+            return regex_match(compiled->compiled_regex, text);
+        } else {
+            char *lower_text = _strdup(text);
+            if (!lower_text) return false;
+
+            for (int i = 0; lower_text[i]; i++) {
+                lower_text[i] = (char)g_ascii_tolower[(unsigned char)lower_text[i]];
+            }
+
+            bool result = regex_match(compiled->compiled_regex, lower_text);
+            free(lower_text);
+            return result;
+        }
+    }
+
+    return pattern_matches(text, compiled->pattern, compiled->case_sensitive, compiled->use_glob, compiled->use_regex);
 }
 
 void pattern_free_compiled(pattern_compiled_t *compiled) {
     if (!compiled) return;
+    if (compiled->compiled_regex) {
+        regex_free(compiled->compiled_regex);
+    }
     free(compiled->pattern);
     free(compiled);
 }

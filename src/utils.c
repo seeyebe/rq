@@ -4,6 +4,43 @@
 #include <string.h>
 #include <ctype.h>
 
+// File extension arrays for type detection
+const char* text_extensions[] = {
+    "txt", "md", "c", "cpp", "h", "hpp", "cs", "java", "py", "js", "ts", "html", "htm",
+    "css", "xml", "json", "yaml", "yml", "ini", "cfg", "conf", "log", "sql", "sh", "bat",
+    "ps1", "php", "rb", "go", "rs", "kt", "scala", "pl", "r", "matlab", "tex", "rtf", NULL
+};
+
+const char* image_extensions[] = {
+    "jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif", "svg", "webp", "ico", "psd", "ai", NULL
+};
+
+const char* video_extensions[] = {
+    "mp4", "avi", "mkv", "mov", "wmv", "flv", "webm", "m4v", "3gp", "mpg", "mpeg", NULL
+};
+
+const char* audio_extensions[] = {
+    "mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "aiff", NULL
+};
+
+const char* archive_extensions[] = {
+    "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "cab", "msi", "deb", "rpm", NULL
+};
+
+bool has_extension(const char *filepath, const char **extensions) {
+    const char *ext = strrchr(filepath, '.');
+    if (!ext) return false;
+
+    ext++;
+
+    for (int i = 0; extensions[i] != NULL; i++) {
+        if (_stricmp(ext, extensions[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int parse_size_arg(const char *arg, uint64_t *size) {
     if (!arg || !size) return -1;
 

@@ -1,6 +1,7 @@
 #include "output.h"
 #include "utils.h"
 #include "version.h"
+#include "preview.h"
 #include <stdio.h>
 #include <inttypes.h>
 
@@ -35,7 +36,7 @@ static void json_escape_string(FILE *fp, const char *str) {
 static void output_json_format(FILE *fp, const search_result_t *results, size_t count) {
     fputs("{\n", fp);
     fputs("  \"type\": \"search\",\n", fp);
-    fprintf(fp, "  \"version\": \"%s\",\n", rq_VERSION_STRING);
+    fprintf(fp, "  \"version\": \"%s\",\n", RQ_VERSION_STRING);
     fprintf(fp, "  \"count\": %zu,\n", count);
     fputs("  \"results\": [\n", fp);
 
@@ -93,6 +94,48 @@ int output_search_results(FILE *fp, const search_result_t *results, size_t count
         case OUTPUT_FORMAT_TEXT:
         default:
             output_text_format(fp, results, count);
+            break;
+    }
+
+    return 0;
+}
+
+static void output_text_format_with_preview(FILE *fp, const search_result_t *results, size_t count, const search_criteria_t *criteria) {
+    const search_result_t *current = results;
+
+    while (current) {
+        fputs(current->path, fp);
+        fputc('\n', fp);
+
+        if (criteria && criteria->preview_mode) {
+            rq_file_type_t type = detect_file_type(current->path);
+            if (type == RQ_FILE_TYPE_TEXT) {
+                preview_text_file(current->path, criteria->preview_lines, fp);
+            } else {
+                preview_file_summary(current->path, fp);
+            }
+            fputc('\n', fp);
+        }
+
+        current = current->next;
+    }
+
+    if (count > 0) {
+        fprintf(stderr, "Found %zu files.\n", count);
+    }
+}
+
+int output_search_results_with_preview(FILE *fp, const search_result_t *results, size_t count,
+                                       const search_criteria_t *criteria, output_format_t format) {
+    if (!fp) return -1;
+
+    switch (format) {
+        case OUTPUT_FORMAT_JSON:
+            output_json_format(fp, results, count);
+            break;
+        case OUTPUT_FORMAT_TEXT:
+        default:
+            output_text_format_with_preview(fp, results, count, criteria);
             break;
     }
 

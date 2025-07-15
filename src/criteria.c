@@ -1,5 +1,6 @@
 #include "criteria.h"
 #include "platform.h"
+#include "utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -11,7 +12,11 @@ void criteria_init(search_criteria_t *criteria) {
 
     criteria->case_sensitive = false;
     criteria->use_glob = false;
+    criteria->use_regex = false;
     criteria->skip_common_dirs = true;
+    criteria->preview_mode = false;
+    criteria->preview_lines = 10;
+    criteria->file_type_filter = NULL;
     criteria->max_threads = 0;
     criteria->timeout_ms = 300000;    // 5 minutes
     criteria->follow_symlinks = false;
@@ -92,6 +97,7 @@ void criteria_cleanup(search_criteria_t *criteria) {
 
     free(criteria->root_path);
     free(criteria->search_term);
+    free(criteria->file_type_filter);
 
     if (criteria->extensions) {
         for (size_t i = 0; i < criteria->extensions_count; i++) {
@@ -198,4 +204,30 @@ bool criteria_time_matches(const FILETIME *file_time, const search_criteria_t *c
     }
 
     return true;
+}
+
+bool criteria_file_type_matches(const char *filename, const search_criteria_t *criteria) {
+    if (!filename || !criteria || !criteria->file_type_filter) {
+        return true;
+    }
+
+    const char *filter = criteria->file_type_filter;
+
+    if (_stricmp(filter, "text") == 0) {
+        return has_extension(filename, text_extensions);
+    }
+    if (_stricmp(filter, "image") == 0) {
+        return has_extension(filename, image_extensions);
+    }
+    if (_stricmp(filter, "video") == 0) {
+        return has_extension(filename, video_extensions);
+    }
+    if (_stricmp(filter, "audio") == 0) {
+        return has_extension(filename, audio_extensions);
+    }
+    if (_stricmp(filter, "archive") == 0) {
+        return has_extension(filename, archive_extensions);
+    }
+    
+    return false;
 }

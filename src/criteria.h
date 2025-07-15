@@ -17,7 +17,11 @@ typedef struct search_criteria {
     FILETIME before_time;
     bool case_sensitive;
     bool use_glob;
+    bool use_regex;
     bool skip_common_dirs;
+    bool preview_mode;
+    size_t preview_lines;
+    char *file_type_filter;
     bool has_min_size;
     bool has_max_size;
     bool has_exact_size;
@@ -45,5 +49,7 @@ bool criteria_extension_matches(const char *filename, const search_criteria_t *c
 bool criteria_size_matches(uint64_t file_size, const search_criteria_t *criteria);
 
 bool criteria_time_matches(const FILETIME *file_time, const search_criteria_t *criteria);
+
+bool criteria_file_type_matches(const char *filename, const search_criteria_t *criteria);
 
 #endif
