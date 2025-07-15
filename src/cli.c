@@ -24,14 +24,16 @@ void print_usage(const char *program_name) {
     printf("  <pattern>           Search pattern (use --glob for wildcards)\n\n");
 
     printf("Search Options:\n");
-    printf("  -c, --case          Case-sensitive search\n");
-    printf("  -g, --glob          Enable glob patterns (* ? [] {})\n");
+    printf("  -c, --case              Case-sensitive search\n");
+    printf("  -g, --glob              Enable glob patterns (* ? [] {})\n");
+    printf("  -r, --regex             Enable regex patterns (filename matching)\n");
     printf("  -H, --include-hidden    Include hidden files and directories\n");
     printf("  -L, --follow-symlinks   Follow symbolic links\n");
-    printf("      --no-skip       Don't skip common directories (node_modules, .git, etc.)\n\n");
+    printf("      --no-skip           Don't skip common directories (node_modules, .git, etc.)\n\n");
 
     printf("Filters:\n");
     printf("  -e, --ext <list>    Filter by file extensions (comma-separated)\n");
+    printf("  -t, --type <type>   Filter by file type (text, image, video, audio, archive, binary)\n");
     printf("      --min <size>    Minimum file size (supports K, M, G, T suffixes)\n");
     printf("      --max <size>    Maximum file size (supports K, M, G, T suffixes)\n");
     printf("      --size <size>   Exact file size, or +size (larger), -size (smaller)\n");
@@ -46,8 +48,9 @@ void print_usage(const char *program_name) {
     printf("      --stats         Show real-time thread pool statistics\n\n");
 
     printf("Output:\n");
-    printf("      --out <file>    Write output to file\n");
-    printf("      --json          Output results as JSON\n\n");
+    printf("      --preview [<n>]     Show preview of text files (default: 10 lines)\n");
+    printf("      --out <file>        Write output to file\n");
+    printf("      --json              Output results as JSON\n\n");
 
     printf("General:\n");
     printf("  -h, --help          Show this help message\n");
@@ -106,6 +109,8 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
             criteria->case_sensitive = true;
         } else if (strcmp(argv[i], "--glob") == 0 || strcmp(argv[i], "-g") == 0) {
             criteria->use_glob = true;
+        } else if (strcmp(argv[i], "--regex") == 0 || strcmp(argv[i], "-r") == 0) {
+            criteria->use_regex = true;
         } else if (strcmp(argv[i], "--no-skip") == 0) {
             criteria->skip_common_dirs = false;
         } else if (strcmp(argv[i], "--follow-symlinks") == 0 || strcmp(argv[i], "-L") == 0) {
@@ -118,6 +123,23 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
                 return -1;
             }
             if (!criteria_parse_extensions(criteria, argv[i])) {
+                criteria_cleanup(criteria);
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--type") == 0 || strcmp(argv[i], "-t") == 0) {
+            if (++i >= argc) {
+                criteria_cleanup(criteria);
+                return -1;
+            }
+            if (_stricmp(argv[i], "text") != 0 && _stricmp(argv[i], "image") != 0 &&
+                _stricmp(argv[i], "video") != 0 && _stricmp(argv[i], "audio") != 0 &&
+                _stricmp(argv[i], "archive") != 0 && _stricmp(argv[i], "binary") != 0) {
+                fprintf(stderr, "Error: Invalid file type '%s'. Valid types: text, image, video, audio, archive, binary\n", argv[i]);
+                criteria_cleanup(criteria);
+                return -1;
+            }
+            criteria->file_type_filter = _strdup(argv[i]);
+            if (!criteria->file_type_filter) {
                 criteria_cleanup(criteria);
                 return -1;
             }
@@ -214,6 +236,15 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
             options->output_file = argv[i];
         } else if (strcmp(argv[i], "--json") == 0) {
             options->json_output = true;
+        } else if (strcmp(argv[i], "--preview") == 0) {
+            criteria->preview_mode = true;
+            if (i + 1 < argc && isdigit(argv[i + 1][0])) {
+                i++;
+                int lines = atoi(argv[i]);
+                if (lines > 0 && lines <= 1000) {
+                    criteria->preview_lines = (size_t)lines;
+                }
+            }
         } else if (strcmp(argv[i], "--stats") == 0) {
             options->show_stats = true;
         } else {
@@ -226,7 +257,7 @@ int parse_command_line(int argc, char *argv[], search_criteria_t *criteria, cli_
     return 0;
 }
 
-int output_results(const search_result_t *results, size_t count, const cli_options_t *options) {
+int output_results(const search_result_t *results, size_t count, const cli_options_t *options, const search_criteria_t *criteria) {
     FILE *fp = stdout;
 
     if (options->output_file) {
@@ -238,7 +269,13 @@ int output_results(const search_result_t *results, size_t count, const cli_optio
     }
 
     output_format_t format = options->json_output ? OUTPUT_FORMAT_JSON : OUTPUT_FORMAT_TEXT;
-    int result = output_search_results(fp, results, count, format);
+    int result;
+
+    if (criteria && criteria->preview_mode) {
+        result = output_search_results_with_preview(fp, results, count, criteria, format);
+    } else {
+        result = output_search_results(fp, results, count, format);
+    }
 
     if (options->output_file) {
         fclose(fp);

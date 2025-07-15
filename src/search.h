@@ -45,10 +45,6 @@ struct search_context {
 
 int search_files_fast(search_criteria_t *criteria, search_result_t **results, size_t *count);
 
-int search_files_streaming(search_criteria_t *criteria,
-                          result_callback_t result_callback, void *user_data,
-                          search_progress_callback_t progress_callback, void *progress_user_data);
-
 int search_files_advanced(search_criteria_t *criteria,
                          search_result_t **results, size_t *count,
                          result_callback_t result_callback, void *result_user_data,
