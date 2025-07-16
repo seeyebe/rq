@@ -22,7 +22,7 @@ rq C:\Users\me\Documents report --ext pdf,docx --after 2025-01-01 --json
 ```text
 rq - fast file search tool for Windows
 
-Usage: E:\workspace\snub\build\rq.exe <directory> <pattern> [OPTIONS]
+Usage: rq <directory> <pattern> [OPTIONS]
 
 Arguments:
   <directory>         The directory to search in
@@ -63,16 +63,16 @@ General:
 
 Examples:
   Search for all PNG files:
-    E:\workspace\snub\build\rq.exe D:\ "*.png" --glob
+    rq D:\ "*.png" --glob
 
   Find documents larger than 1MB:
-    E:\workspace\snub\build\rq.exe . document --min 1M --ext pdf,docx
+    rq . document --min 1M --ext pdf,docx
 
   Find files smaller than 100KB:
-    E:\workspace\snub\build\rq.exe . "" --size -100K --ext txt
+    rq . "" --size -100K --ext txt
 
   Case-sensitive search with thread monitoring:
-    E:\workspace\snub\build\rq.exe C:\ "Config" --case --stats --threads 8
+    rq C:\ "Config" --case --stats --threads 8
 
 For glob patterns: * (any chars), ? (single char), [abc] (char set), {jpg,png} (alternatives)
 ```
